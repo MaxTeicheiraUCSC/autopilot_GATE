@@ -60,7 +60,6 @@ while IFS=' ' read -r project_name git_url; do
             exit 0
         fi
 
-        local_head="$(get_head_commit)"
         remote_head="$(get_remote_head "$branch")"
 
         if [[ -z "$remote_head" ]]; then
@@ -69,13 +68,17 @@ while IFS=' ' read -r project_name git_url; do
             exit 0
         fi
 
-        if [[ "$local_head" == "$remote_head" ]]; then
-            log_info "$project_name: No new commits (HEAD=$local_head)"
+        # Compare remote HEAD against stored last_commit (not local HEAD)
+        # This correctly detects new commits even when pushing from the same clone.
+        last_known="$(get_last_commit "$project_name")"
+
+        if [[ "$last_known" == "$remote_head" ]]; then
+            log_info "$project_name: No new commits (remote=$remote_head)"
             release_lock
             exit 0
         fi
 
-        log_info "$project_name: New commits detected! $local_head -> $remote_head"
+        log_info "$project_name: New commits detected! $last_known -> $remote_head"
         latest_msg="$(git log --format='%s' "origin/$branch" -1)"
         send_notification "$project_name: New commit detected" \
             "Commit: ${remote_head:0:8}\nMessage: $latest_msg\nBranch: $branch\nTriggering pipeline..."
