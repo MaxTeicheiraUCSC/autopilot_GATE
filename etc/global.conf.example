@@ -1,0 +1,27 @@
+# Autopilot Global Configuration
+# Copy this file to etc/global.conf and fill in your values:
+#   cp etc/global.conf.example etc/global.conf
+
+# Email for notifications (leave empty to disable)
+AUTOPILOT_EMAIL=""
+
+# Slack webhook URL for notifications (leave empty to disable)
+AUTOPILOT_SLACK_WEBHOOK=""
+
+# Slack Bot/User Token for file uploads (images, plots)
+AUTOPILOT_SLACK_TOKEN=""
+
+# Slack channel ID for notifications
+AUTOPILOT_SLACK_CHANNEL=""
+
+# Maximum fix cycles before requiring human intervention
+AUTOPILOT_MAX_FIX_CYCLES=3
+
+# Debug mode (set to 1 for verbose logging)
+AUTOPILOT_DEBUG=0
+
+# Default SLURM partition for sentinel jobs
+AUTOPILOT_SENTINEL_PARTITION="128x24"
+
+# Default SLURM time limit for sentinel jobs
+AUTOPILOT_SENTINEL_TIME="00:30:00"

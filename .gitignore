@@ -1,0 +1,11 @@
+# Runtime data — logs, state, SLURM run artifacts
+var/
+
+# Secrets — Slack webhook/token, email
+etc/global.conf
+
+# Machine-specific project list
+etc/projects.conf
+
+# Claude CLI settings (machine-specific)
+.claude/

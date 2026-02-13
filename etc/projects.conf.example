@@ -1,0 +1,6 @@
+# Autopilot Projects Configuration
+# Format: project_name git_url
+# Example: gate_sim git@github.com:user/gate_sim.git
+#
+# Use autopilot-register.sh to add projects:
+#   autopilot-register.sh <project_name> <git_url>
