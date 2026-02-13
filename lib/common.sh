@@ -196,38 +196,31 @@ send_slack() {
         return
     fi
 
+    # Convert literal \n sequences to real newlines
+    body="$(printf '%b' "$body")"
+
     # Truncate body to 3000 chars (Slack block limit)
     local truncated_body="${body:0:3000}"
     if [[ ${#body} -gt 3000 ]]; then
         truncated_body+="... (truncated)"
     fi
 
-    # Escape special JSON characters
-    local escaped_body
-    escaped_body="$(printf '%s' "$truncated_body" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')"
-    local escaped_subject
-    escaped_subject="$(printf '%s' "$subject" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')"
-
+    # Build JSON payload via Python for proper escaping
     local payload
-    payload="$(cat <<EOJSON
-{
-    "blocks": [
-        {
-            "type": "header",
-            "text": {"type": "plain_text", "text": $(echo "$escaped_subject"), "emoji": true}
-        },
-        {
-            "type": "section",
-            "text": {"type": "mrkdwn", "text": $(echo "$escaped_body")}
-        },
-        {
-            "type": "context",
-            "elements": [{"type": "mrkdwn", "text": "autopilot | $(date '+%Y-%m-%d %H:%M:%S') | $(hostname)"}]
-        }
+    payload="$(python3 -c "
+import json, sys
+subject = sys.argv[1]
+body = sys.argv[2]
+ts = sys.argv[3]
+host = sys.argv[4]
+print(json.dumps({
+    'blocks': [
+        {'type': 'header', 'text': {'type': 'plain_text', 'text': subject, 'emoji': True}},
+        {'type': 'section', 'text': {'type': 'mrkdwn', 'text': body}},
+        {'type': 'context', 'elements': [{'type': 'mrkdwn', 'text': f'autopilot | {ts} | {host}'}]},
     ]
-}
-EOJSON
-)"
+}))
+" "$subject" "$truncated_body" "$(date '+%Y-%m-%d %H:%M:%S')" "$(hostname)")"
 
     curl -s -X POST -H 'Content-type: application/json' \
         --data "$payload" \
@@ -340,6 +333,55 @@ monitor_jobs() {
     done
 
     return 0
+}
+
+# ── Failure Classification ──
+# Classify a SLURM failure state as transient or permanent.
+# Returns: "transient" or "permanent"
+classify_failure() {
+    local state="$1"
+    case "$state" in
+        NODE_FAIL|TIMEOUT|OUT_OF_MEMORY)
+            echo "transient"
+            ;;
+        FAILED|CANCELLED|PREEMPTED)
+            echo "permanent"
+            ;;
+        *)
+            echo "permanent"
+            ;;
+    esac
+}
+
+# Get the number of retry attempts for a job in a run.
+get_retry_count() {
+    local run_dir="$1" job_name="$2"
+    local retry_state="$run_dir/retry_state.json"
+    if [[ -f "$retry_state" ]]; then
+        python3 -c "
+import json, sys
+with open('$retry_state') as f:
+    data = json.load(f)
+retries = data.get('retries', {}).get('$job_name', {})
+attempts = retries.get('attempts', [])
+print(len(attempts))
+" 2>/dev/null || echo "0"
+    else
+        echo "0"
+    fi
+}
+
+# Check if any retry config exists in parsed cluster.yaml variables.
+has_retry_config() {
+    local num_jobs="${NUM_JOBS:-0}"
+    for ((i = 0; i < num_jobs; i++)); do
+        local retry_var="JOB_${i}_RETRY_MAX_RETRIES"
+        local max_retries="${!retry_var:-0}"
+        if [[ "$max_retries" -gt 0 ]]; then
+            return 0  # true
+        fi
+    done
+    return 1  # false
 }
 
 # ── Git Helpers ──

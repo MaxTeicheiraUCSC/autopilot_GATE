@@ -151,6 +151,15 @@ done
 # This lightweight job runs after ALL other jobs complete, triggering the review.
 ALL_IDS_STR="$(IFS=':'; echo "${ALL_JOB_IDS[*]}")"
 
+# ── Determine sentinel time (increase if retries are configured) ──
+SENTINEL_TIME="${AUTOPILOT_SENTINEL_TIME:-00:30:00}"
+if has_retry_config 2>/dev/null; then
+    # With retries, sentinel may need to wait for retried tasks to complete.
+    # Bump time to 2 hours to accommodate retry wait + review.
+    SENTINEL_TIME="02:00:00"
+    log_info "[$PROJECT_NAME] Retry config detected — sentinel time increased to $SENTINEL_TIME"
+fi
+
 log_info "[$PROJECT_NAME] Submitting sentinel job (depends on: $ALL_IDS_STR)"
 
 SENTINEL_SCRIPT="$RUN_DIR/sentinel.sh"
@@ -176,7 +185,7 @@ SENTINEL_OUTPUT="$(sbatch \
     --partition="${AUTOPILOT_SENTINEL_PARTITION:-128x24}" \
     --cpus-per-task=1 \
     --mem=2G \
-    --time="${AUTOPILOT_SENTINEL_TIME:-00:30:00}" \
+    --time="$SENTINEL_TIME" \
     --export="AUTOPILOT_RUN_DIR=$RUN_DIR,AUTOPILOT_PROJECT=$PROJECT_NAME,AUTOPILOT_BIN=$AUTOPILOT_BIN,AUTOPILOT_HOME=$AUTOPILOT_HOME,HOME=$HOME,PATH=$PATH" \
     "$SENTINEL_SCRIPT" 2>&1)"
 
@@ -201,10 +210,10 @@ EOSUMMARY
 # Build a summary of all submitted jobs for Slack
 JOBS_SUMMARY=""
 while IFS='=' read -r jn ji; do
-    JOBS_SUMMARY+="• $jn → $ji\n"
+    JOBS_SUMMARY+=$'\n'"• $jn → $ji"
 done < "$RUN_DIR/job_ids.txt"
 
 send_notification "$PROJECT_NAME: Pipeline submitted" \
-    "Commit: $(git rev-parse --short HEAD) — $(git log --format='%s' -1)\nRun: $(basename "$RUN_DIR")\n\nJobs:\n${JOBS_SUMMARY}\nSentinel will trigger Claude review when all jobs complete."
+    "Commit: $(git rev-parse --short HEAD) — $(git log --format='%s' -1)"$'\n'"Run: $(basename "$RUN_DIR")"$'\n\n'"Jobs:${JOBS_SUMMARY}"$'\n\n'"Sentinel will trigger Claude review when all jobs complete."
 
 log_info "[$PROJECT_NAME] All jobs submitted successfully. Sentinel will trigger review."
